@@ -1,8 +1,8 @@
 <!-- TOC -->
 
 - [Storage Replica - Stretch Cluster scenario](#storage-replica---stretch-cluster-scenario)
-    - [LabConfig for Windows Server 2016](#labconfig-for-windows-server-2016)
-    - [Labconfig for Windows Server Insider](#labconfig-for-windows-server-insider)
+    - [LabConfig.ps1 for Windows Server 2016](#labconfigps1-for-windows-server-2016)
+    - [Labconfig.ps1 for Windows Server Insider](#labconfigps1-for-windows-server-insider)
     - [Scenario.ps1](#scenariops1)
         - [Region LabConfig](#region-labconfig)
         - [Region install features for management](#region-install-features-for-management)
@@ -28,9 +28,9 @@ This scenario will set up stretch cluster, while some VMs are running in site1 a
 
 Additionally, you can test failover in Windows Server Insider
 
-## LabConfig for Windows Server 2016
+## LabConfig.ps1 for Windows Server 2016
 
-````PowerShell
+```PowerShell
 $LabConfig=@{ DomainAdminName='LabAdmin'; AdminPassword='LS1setup!'; Prefix = 'SR-'; SwitchName = 'LabSwitch'; DCEdition='4';AdditionalNetworksConfig=@();VMs=@()}
 
 $LABConfig.AdditionalNetworksConfig += @{ NetName = 'ReplicaNet1'; NetAddress='172.16.1.'; NetVLAN='0'; Subnet='255.255.255.0'}
@@ -40,33 +40,33 @@ $LABConfig.AdditionalNetworksConfig += @{ NetName = 'ReplicaNet1'; NetAddress='1
 1..2 | ForEach-Object { $VMNames="Replica" ; $LABConfig.VMs += @{ VMName = "$VMNames$_" ; Configuration = 'Shared'  ; ParentVHD = 'Win2016Core_G2.vhdx'   ; SSDNumber = 2; SSDSize=200GB ; HDDNumber = 2  ; HDDSize= 2TB ; MemoryStartupBytes= 2GB ; MemoryMinimumBytes= 1GB ; VMSet= 'ReplicaSite1' ; NestedVirt=$True ; AdditionalNetworks = $True} }
 3..4 | ForEach-Object { $VMNames="Replica" ; $LABConfig.VMs += @{ VMName = "$VMNames$_" ; Configuration = 'Shared'  ; ParentVHD = 'Win2016Core_G2.vhdx'   ; SSDNumber = 2; SSDSize=200GB ; HDDNumber = 2  ; HDDSize= 2TB ; MemoryStartupBytes= 2GB ; MemoryMinimumBytes= 1GB ; VMSet= 'ReplicaSite2' ; NestedVirt=$True ; AdditionalNetworks = $True} }
  
-````
+```
 
-## Labconfig for Windows Server Insider
+## Labconfig.ps1 for Windows Server Insider
 
-````PowerShell
-$LabConfig=@{ DomainAdminName='LabAdmin'; AdminPassword='LS1setup!'; Prefix = 'WSLabInsider17650-'; SwitchName = 'LabSwitch'; DCEdition='4'; CreateClientParent=$false ; ClientEdition='Enterprise'; PullServerDC=$false ; Internet=$false ;AdditionalNetworksConfig=@(); VMs=@(); ServerVHDs=@()}
+```PowerShell
+$LabConfig=@{ DomainAdminName='LabAdmin'; AdminPassword='LS1setup!'; Prefix = 'WSLabInsider17724-'; SwitchName = 'LabSwitch'; DCEdition='4'; CreateClientParent=$false ; ClientEdition='Enterprise'; PullServerDC=$false ; Internet=$false ;AdditionalNetworksConfig=@(); VMs=@(); ServerVHDs=@()}
 
 $LABConfig.AdditionalNetworksConfig += @{ NetName = 'ReplicaNet1'; NetAddress='172.16.1.'; NetVLAN='0'; Subnet='255.255.255.0'}
 
 #$LabConfig.VMs += @{ VMName = 'WAC' ; Configuration = 'Simple' ; ParentVHD = 'Win10_G2.vhdx'  ; MemoryStartupBytes= 1GB ; MemoryMinimumBytes=1GB ; AddToolsVHD=$True ; DisableWCF=$True ; EnableWinRM=$True }
 
-1..2 | ForEach-Object { $VMNames="Replica" ; $LABConfig.VMs += @{ VMName = "$VMNames$_" ; Configuration = 'Shared'  ; ParentVHD = 'Win2019Core_17650.vhdx'  ; SSDNumber = 2; SSDSize=200GB ; HDDNumber = 3  ; HDDSize= 2TB ; MemoryStartupBytes= 2GB ; MemoryMinimumBytes= 1GB ; VMSet= 'ReplicaSite1' ; NestedVirt=$True ; AdditionalNetworks = $True} }
-3..4 | ForEach-Object { $VMNames="Replica" ; $LABConfig.VMs += @{ VMName = "$VMNames$_" ; Configuration = 'Shared'  ; ParentVHD = 'Win2019Core_17650.vhdx'  ; SSDNumber = 2; SSDSize=200GB ; HDDNumber = 3  ; HDDSize= 2TB ; MemoryStartupBytes= 2GB ; MemoryMinimumBytes= 1GB ; VMSet= 'ReplicaSite2' ; NestedVirt=$True ; AdditionalNetworks = $True} }
+1..2 | ForEach-Object { $VMNames="Replica" ; $LABConfig.VMs += @{ VMName = "$VMNames$_" ; Configuration = 'Shared'  ; ParentVHD = 'Win2019Core_17724.vhdx'  ; SSDNumber = 2; SSDSize=200GB ; HDDNumber = 3  ; HDDSize= 2TB ; MemoryStartupBytes= 2GB ; MemoryMinimumBytes= 1GB ; VMSet= 'ReplicaSite1' ; NestedVirt=$True ; AdditionalNetworks = $True} }
+3..4 | ForEach-Object { $VMNames="Replica" ; $LABConfig.VMs += @{ VMName = "$VMNames$_" ; Configuration = 'Shared'  ; ParentVHD = 'Win2019Core_17724.vhdx'  ; SSDNumber = 2; SSDSize=200GB ; HDDNumber = 3  ; HDDSize= 2TB ; MemoryStartupBytes= 2GB ; MemoryMinimumBytes= 1GB ; VMSet= 'ReplicaSite2' ; NestedVirt=$True ; AdditionalNetworks = $True} }
 
 $LabConfig.ServerVHDs += @{
     Edition="4"
-    VHDName="Win2019_17650.vhdx"
+    VHDName="Win2019_17724.vhdx"
     Size=60GB
 }
 $LabConfig.ServerVHDs += @{
     Edition="3"
-    VHDName="Win2019Core_17650.vhdx"
+    VHDName="Win2019Core_17724.vhdx"
     Size=30GB
 }
  
 
-````
+```
 ## Scenario.ps1
 
 Collapsed sections in scenario.ps1 (ctrl+m in PowerShell ISE)
@@ -147,7 +147,7 @@ You can run all code from DC
 
 Format disks, and rename it in cluster
 
-````PowerShell
+```PowerShell
 #Format Disks
 New-Volume -DiskNumber 5 -FriendlyName "TestFailoverSite1" -FileSystem ReFS -CimSession Replica1 -ErrorAction SilentlyContinue
 New-Volume -DiskNumber 5 -FriendlyName "TestFailoverSite2" -FileSystem ReFS -CimSession Replica3 -ErrorAction SilentlyContinue
@@ -172,22 +172,22 @@ function Rename-ClusterDisk ($ClusterName,$FileSystemLabel,$ClusterNodeName,$New
 Rename-ClusterDisk -ClusterName Stretch-Cluster -FileSystemLabel TestFailoverSite1 -clusternodename Replica1 -NewName TestFailoverSite1
 Rename-ClusterDisk -ClusterName Stretch-Cluster -FileSystemLabel TestFailoverSite2 -clusternodename Replica3 -NewName TestFailoverSite2
  
-````
+```
 
 ![](/Scenarios/StorageReplica/Stretch_Cluster/screenshots/FailoverDisksRenamed.png)
 
 Get SR Partnerships
 
-````PowerShell
+```PowerShell
 Get-SRGroup -CimSession stretch-cluster | select Name -ExpandProperty Replicas | ft Name, DataVolume,ReplicationMode,ReplicationStatus,IsMounted
  
-````
+```
 
 ![](/Scenarios/StorageReplica/Stretch_Cluster/screenshots/Replicas.png)
 
 Mount
 
-````PowerShell
+```PowerShell
 Function Mount-SRDestinationClusterDisk ($ClusterName,$ClusterNodeName,$RGName,$ClusterDiskName,$DriveLetter){
     #move available disks to $ClusterNodeName
     if ((Get-ClusterGroup -Cluster $ClusterName -Name "Available Storage").OwnerNode -ne $ClusterNodeName){
@@ -222,14 +222,14 @@ Function Mount-SRDestinationClusterDisk ($ClusterName,$ClusterNodeName,$RGName,$
 Mount-SRDestinationClusterDisk -ClusterName stretch-cluster -ClusterNodeName replica3 -RGName Data1Destination -ClusterDiskName TestFailoverSite2 -DriveLetter M
 Mount-SRDestinationClusterDisk -ClusterName stretch-cluster -ClusterNodeName replica1 -RGName Data2Destination -ClusterDiskName TestFailoverSite1 -DriveLetter N
  
-````
+```
 
 ![](/Scenarios/StorageReplica/Stretch_Cluster/screenshots/FailoverDisksMounted.png)
 
 
 Dismount
 
-````PowerShell
+```PowerShell
 #to dismount destination without errors its needed to move available storage to the same site as SRDestination Volume
 Move-ClusterGroup -Cluster stretch-cluster -Name "Available Storage" -Node Replica3
 Dismount-SRDestination -ComputerName Replica3 -Name Data1Destination -Confirm:0
@@ -238,7 +238,7 @@ Dismount-SRDestination -ComputerName Replica3 -Name Data1Destination -Confirm:0
 Move-ClusterGroup -Cluster stretch-cluster -Name "Available Storage" -Node Replica1
 Dismount-SRDestination -ComputerName Replica1 -Name Data2Destination -Confirm:0
  
-````
+```
 
 ## Known issues
 

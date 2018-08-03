@@ -58,11 +58,11 @@ If (!( $isAdmin )) {
 <unattend xmlns="urn:schemas-microsoft-com:unattend" xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
   <settings pass="offlineServicing">
     <component name="Microsoft-Windows-UnattendedJoin" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS">
-        <OfflineIdentification>              
-           <Provisioning>  
+        <OfflineIdentification>
+           <Provisioning>
              <AccountData>$Blob</AccountData>
-           </Provisioning>  
-         </OfflineIdentification>  
+           </Provisioning>
+         </OfflineIdentification>
     </component>
   </settings>
   <settings pass="oobeSystem">
@@ -138,7 +138,7 @@ If (!( $isAdmin )) {
         <RunSynchronous>
             $RunSynchronous
         </RunSynchronous>
-    </component>   
+    </component>
  </settings>
  <settings pass="oobeSystem">
     <component name="Microsoft-Windows-Shell-Setup" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS">
@@ -202,7 +202,7 @@ If (!( $isAdmin )) {
         <RunSynchronous>
             $RunSynchronous
         </RunSynchronous>
-    </component>    
+    </component>
     <component name="Microsoft-Windows-UnattendedJoin" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS" xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
         <Identification>
                 <Credentials>
@@ -512,7 +512,11 @@ If (!( $isAdmin )) {
         #set MemoryMinimumBytes
         if ($VMConfig.MemoryMinimumBytes -ne $null){
             WriteInfo "`t Configuring MemoryMinimumBytes to $($VMConfig.MemoryMinimumBytes/1MB)MB"
-            Set-VM -VM $VMTemp -MemoryMinimumBytes $VMConfig.MemoryMinimumBytes
+            if ($VMConfig.NestedVirt){
+                "`t `t Skipping! NestedVirt configured"
+            }else{
+                Set-VM -VM $VMTemp -MemoryMinimumBytes $VMConfig.MemoryMinimumBytes
+            }
         }
 
         #Set static Memory
@@ -596,7 +600,7 @@ If (!( $isAdmin )) {
         }elseif($VMConfig.Win2012Djoin -or $VMConfig.Unattend -eq "DjoinCred"){
             WriteInfo "`t Creating Unattend with win2012-ish domain join"
             $unattendfile=CreateUnattendFileWin2012 -ComputerName $Name -AdminPassword $LabConfig.AdminPassword -DomainName $Labconfig.DomainName -RunSynchronous $RunSynchronous -TimeZone $TimeZone
-        
+
         }elseif($VMConfig.Unattend -eq "DjoinBlob" -or -not ($VMConfig.Unattend)){
             WriteInfo "`t Creating Unattend with djoin blob"
             $path="c:\$vmname.txt"
@@ -667,7 +671,7 @@ If (!( $isAdmin )) {
 
     $DN=$null
     $LabConfig.DomainName.Split(".") | ForEach-Object {
-        $DN+="DC=$_,"   
+        $DN+="DC=$_,"
     }
     $LabConfig.DN=$DN.TrimEnd(",")
 
@@ -690,9 +694,6 @@ If (!( $isAdmin )) {
 
     #Grab TimeZone
     $TimeZone=(Get-TimeZone).id
-
-    #Grab Installation type
-    $WindowsInstallationType=Get-ItemPropertyValue -Path 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\' -Name InstallationType
 
     #Grab number of processors
     (get-wmiobject win32_processor).NumberOfLogicalProcessors  | ForEach-Object { $global:NumberOfLogicalProcessors += $_}
@@ -733,23 +734,25 @@ If (!( $isAdmin )) {
             }else{
                 WriteErrorAndExit "`t Windows build older than 14393 detected. vTPM will not work Exiting"
             }
+            <# Not needed anymore as VBS is automatically enabled since 14393 when vTPM is used
             if (((Get-CimInstance -ClassName Win32_DeviceGuard -Namespace root\Microsoft\Windows\DeviceGuard).VirtualizationBasedSecurityStatus -ne 0) -and ((Get-Process "secure system") -ne $null )){
                 WriteSuccess "`t Virtualization Based Security is running. vTPM can be enabled"
             }else{
                 WriteErrorAndExit "`t Virtualization based security is not running. Enable VBS, or remove vTPM from configuration"
             }
+            #>
             #load Guardian
             $guardian=Get-HgsGuardian | Select-Object -first 1
             if($guardian -eq $null){
                 $guardian=New-HgsGuardian -Name LabGuardian -GenerateCertificates
                 WriteInfo "`t HGS with name LabGuardian created"
-            }    
+            }
         }
 
     #Check support for shared disks + enable if possible
         if ($LABConfig.VMs.Configuration -contains "Shared" -or $LABConfig.VMs.Configuration -contains "Replica"){
             WriteInfoHighlighted "Configuration contains Shared or Replica scenario"
-            
+
             WriteInfo "Checking support for shared disks"
             $OS=Get-WmiObject win32_operatingsystem
             if (($OS.caption -like "*Server*") -and $OS.version -gt 10){
@@ -795,14 +798,12 @@ If (!( $isAdmin )) {
             WriteErrorAndExit "`t Hyper-V tools are not installed. Please install Hyper-V management tools. Exiting"
         }
 
-    #check if running on Core Server and check proper values in LabConfig
-        If ($WindowsInstallationType -eq "Server Core"){
-            If (!$LabConfig.CreateClientParent -and !$LabConfig.ServerISOFolder){
-                WriteErrorAndExit "Server Core detected. Please use ServerISOFolder variable in LabConfig to specify iso location"
-            }elseif($LabConfig.CreateClientParent -and (!$LabConfig.ServerISOFolder -or !$LabConfig.ClientISOFolder)){
-                WriteErrorAndExit "Server Core detected. Please use ServerISOFolder and ClientISOFolder variables in LabConfig to specify iso location"
-            }
-        }
+    #enable EnableEnhancedSessionMode if not enabled
+    if (-not (Get-VMHost).EnableEnhancedSessionMode){
+        WriteInfoHighlighted "Enhanced session mode was disabled. Enabling."
+        Set-VMHost -EnableEnhancedSessionMode $true
+    }
+
     #Create Switches
 
         WriteInfoHighlighted "Creating Switch"
@@ -819,40 +820,49 @@ If (!( $isAdmin )) {
     #connect lab to internet if specified in labconfig
         if ($Labconfig.Internet){
             WriteInfoHighlighted "Internet connectivity requested"
-            WriteInfo "`t Detecting external vSwitch $ExternalSwitchName"
-            $ExternalSwitch=Get-VMSwitch -SwitchType External -Name $ExternalSwitchName -ErrorAction Ignore
-            if ($ExternalSwitch){
-                WriteSuccess "`t External vSwitch  $ExternalSwitchName detected"
-            }else{
-                WriteInfo "`t Detecting external VMSwitch"
-                $ExtSwitch=Get-VMSwitch -SwitchType External
-                if (!$ExtSwitch){
-                    WriteInfoHighlighted "`t No External Switch detected. Will create one "
-                    $TempNetAdapters=get-netadapter | Where-Object Name -NotLike vEthernet* | Where-Object status -eq up
-                    if (!$TempNetAdapters){
-                        WriteErrorAndExit "No Adapters with Status -eq UP detected. Exitting"
-                    }
-                    if ($TempNetAdapters.name.count -eq 1){
-                        WriteInfo "`t Just one connected NIC detected ($($TempNetAdapters.name)). Will create vSwitch connected to it"
-                        $ExternalSwitch=New-VMSwitch -NetAdapterName $TempNetAdapters.name -Name $ExternalSwitchName -AllowManagementOS $true
-                    }
-                    if ($TempNetAdapters.name.count -gt 1){
-                        WriteInfo "`t More than 1 NIC detected"
-                        WriteInfoHighlighted "`t Please select NetAdapter you want to use for vSwitch"
-                        $tempNetAdapter=get-netadapter | Where-Object Name -NotLike vEthernet* | Where-Object status -eq up | Out-GridView -OutputMode Single -Title "Please select adapter you want to use for External vSwitch" 
-                        if (!$tempNetAdapter){
-                            WriteErrorAndExit "You did not select any net adapter. Exitting."
+
+            if (!$LabConfig.CustomDnsForwarders){
+                $LabConfig.CustomDnsForwarders=@("8.8.8.8","1.1.1.1") # Google DNS, Cloudfare
+            }
+
+            WriteInfo "`t Detecting default vSwitch"
+            $DefaultSwitch=Get-VMSwitch -Name "Default Switch" -ErrorAction Ignore
+            if (-not $DefaultSwitch){
+                WriteInfo "`t Default switch not present, detecting external vSwitch $ExternalSwitchName"
+                $ExternalSwitch=Get-VMSwitch -SwitchType External -Name $ExternalSwitchName -ErrorAction Ignore
+                if ($ExternalSwitch){
+                    WriteSuccess "`t External vSwitch  $ExternalSwitchName detected"
+                }else{
+                    WriteInfo "`t Detecting external VMSwitch"
+                    $ExtSwitch=Get-VMSwitch -SwitchType External
+                    if (!$ExtSwitch){
+                        WriteInfoHighlighted "`t No External Switch detected. Will create one "
+                        $TempNetAdapters=get-netadapter | Where-Object Name -NotLike vEthernet* | Where-Object status -eq up
+                        if (!$TempNetAdapters){
+                            WriteErrorAndExit "No Adapters with Status -eq UP detected. Exitting"
                         }
-                        $ExternalSwitch=New-VMSwitch -NetAdapterName $tempNetAdapter.name -Name $ExternalSwitchName -AllowManagementOS $true
+                        if ($TempNetAdapters.name.count -eq 1){
+                            WriteInfo "`t Just one connected NIC detected ($($TempNetAdapters.name)). Will create vSwitch connected to it"
+                            $ExternalSwitch=New-VMSwitch -NetAdapterName $TempNetAdapters.name -Name $ExternalSwitchName -AllowManagementOS $true
+                        }
+                        if ($TempNetAdapters.name.count -gt 1){
+                            WriteInfo "`t More than 1 NIC detected"
+                            WriteInfoHighlighted "`t Please select NetAdapter you want to use for vSwitch"
+                            $tempNetAdapter=get-netadapter | Where-Object Name -NotLike vEthernet* | Where-Object status -eq up | Out-GridView -OutputMode Single -Title "Please select adapter you want to use for External vSwitch" 
+                            if (!$tempNetAdapter){
+                                WriteErrorAndExit "You did not select any net adapter. Exitting."
+                            }
+                            $ExternalSwitch=New-VMSwitch -NetAdapterName $tempNetAdapter.name -Name $ExternalSwitchName -AllowManagementOS $true
+                        }
                     }
-                }
-                if ($ExtSwitch.count -eq 1){
-                    WriteSuccess "`t External vswitch $($ExtSwitch.name) found. Will be used for connecting lab to internet"
-                    $ExternalSwitch=$ExtSwitch
-                }
-                if ($ExtSwitch.count -gt 1){
-                    WriteInfoHighlighted "`t More than 1 External Switch found. Please chose what switch you want to use for internet connectivity"
-                    $ExternalSwitch=Get-VMSwitch -SwitchType External | Out-GridView -OutputMode Single -Title 'Please Select External Switch you want to use for Internet Connectivity'
+                    if ($ExtSwitch.count -eq 1){
+                        WriteSuccess "`t External vswitch $($ExtSwitch.name) found. Will be used for connecting lab to internet"
+                        $ExternalSwitch=$ExtSwitch
+                    }
+                    if ($ExtSwitch.count -gt 1){
+                        WriteInfoHighlighted "`t More than 1 External Switch found. Please chose what switch you want to use for internet connectivity"
+                        $ExternalSwitch=Get-VMSwitch -SwitchType External | Out-GridView -OutputMode Single -Title 'Please Select External Switch you want to use for Internet Connectivity'
+                    }
                 }
             }
         }
@@ -914,7 +924,7 @@ If (!( $isAdmin )) {
             $DC | Checkpoint-VM -SnapshotName Initial
             WriteInfo "`t Virtual Machine $($DC.name) checkpoint created"
             Start-Sleep -Seconds 5
-        
+
         #rename network adapters and add another
             WriteInfo "`t Configuring Network"
 
@@ -931,7 +941,7 @@ If (!( $isAdmin )) {
             }
 
             $DC | Get-VMNetworkAdapter | Connect-VMNetworkAdapter -SwitchName $SwitchName
-        
+
         #add aditional networks
             if ($labconfig.AdditionalNetworksInDC -eq $True){
                 WriteInfoHighlighted "`t Configuring Additional networks"
@@ -991,9 +1001,16 @@ If (!( $isAdmin )) {
     #connect to internet
     if ($labconfig.internet){
         if (-not ($DC | Get-VMNetworkAdapter -Name Internet -ErrorAction SilentlyContinue)){
-            WriteInfo "`t`t Adding Network Adapter Internet and connecting to $($ExternalSwitch.Name)"
+            WriteInfo "`t `t Adding Network Adapter Internet"
             $DC | Add-VMNetworkAdapter -Name Internet -DeviceNaming On
-            $DC | Get-VMNetworkAdapter -Name Internet | Connect-VMNetworkAdapter -VMSwitch $ExternalSwitch
+
+            if ($DefaultSwitch){
+                $internetSwitch = $DefaultSwitch
+            }else{
+                $internetSwitch = $ExternalSwitch
+            }
+            WriteInfo "`t`t Connecting Network Adapter Internet to $($internetSwitch.Name)"
+            $DC | Get-VMNetworkAdapter -Name Internet | Connect-VMNetworkAdapter -VMSwitch $internetSwitch
         }
     }
 
@@ -1060,14 +1077,25 @@ If (!( $isAdmin )) {
                     }until ($test -ne $Null)
                     WriteSuccess "`t `t Active Directory on $($DC.name) is up."
                 }
-                WriteInfoHighlighted "`t Requesting DNS settings from Host"
-                $vNICName=(Get-VMNetworkAdapter -ManagementOS -SwitchName $externalswitch.Name).name | select -First 1 #in case multiple adapters are in managementos
+
                 $DNSServers=@()
-                $DNSServers+=(Get-NetIPConfiguration -InterfaceAlias "vEthernet ($vNICName)").DNSServer.ServerAddresses #grab DNS IP from vNIC
-                $DNSServers+="8.8.8.8","208.67.222.222" #Adding OpenDNS and Google DNS servers
+
+                if(!$LabConfig.SkipHostDnsAsForwarder){
+                    WriteInfoHighlighted "`t Requesting DNS settings from Host"
+                    if($internetSwitch.Name -eq "Default Switch"){
+                        # Host's IP of Default Switch acts also as DNS resolver
+                        $DNSServers+=(Get-HnsNetwork | Where-Object { $_.Name -eq "Default Switch" }).Subnets[0].GatewayAddress
+                    }
+                    else{
+                        $vNICName=(Get-VMNetworkAdapter -ManagementOS -SwitchName $internetSwitch.Name).Name | Select-Object -First 1 #in case multiple adapters are in managementos
+                        $DNSServers+=(Get-NetIPConfiguration -InterfaceAlias "vEthernet ($vNICName)").DNSServer.ServerAddresses #grab DNS IP from vNIC
+                    }
+                }
+
+                $DNSServers+=$LabConfig.CustomDnsForwarders
+
                 WriteInfoHighlighted "`t Configuring NAT with netSH and starting services"
-                Invoke-Command -VMGuid $DC.id -Credential $cred -ArgumentList (,$DNSServers) -ScriptBlock {    
-                    param($DNSServers);
+                Invoke-Command -VMGuid $DC.id -Credential $cred -ScriptBlock {
                     Set-Service -Name RemoteAccess -StartupType Automatic
                     Start-Service -Name RemoteAccess
                     netsh.exe routing ip nat install
@@ -1077,13 +1105,10 @@ If (!( $isAdmin )) {
                     netsh.exe routing ip dnsproxy install
                     Write-Host "Restarting service RemoteAccess..."
                     Restart-Service -Name RemoteAccess -WarningAction SilentlyContinue
-                    foreach ($DNSServer in $DNSServers){
-                        Add-DnsServerForwarder $DNSServer
-                    }
+                    Add-DnsServerForwarder $Using:DNSServers
                 }
             }
         }
-
 
 #endregion
 
@@ -1104,11 +1129,10 @@ If (!( $isAdmin )) {
 
                     [Parameter(Mandatory=$true)]
                     [string[]]$DomainName
-                )          
+                )
             Node $ComputerName {
-            
                 Settings{
-                
+
                     AllowModuleOverwrite = $True
                     ConfigurationMode = 'ApplyAndAutoCorrect'
                     RefreshMode = 'Pull'
@@ -1158,8 +1182,8 @@ If (!( $isAdmin )) {
                                     $SharedHDDs | ForEach-Object {WriteInfo "`t Disk HDD $($_.path) size $($_.size /1GB)GB created"}
                                 }
                             }else{
-                                $SharedSSDs=Get-VHD -Path "$LABfolder\VMs\SharedSSD-$VMSet-*.VHDS"
-                                $SharedHDDs=Get-VHD -Path "$LABfolder\VMs\SharedHDD-$VMSet-*.VHDS"
+                                $SharedSSDs=Get-VHD -Path "$LABfolder\VMs\SharedSSD-$VMSet-*.VHDS" -ErrorAction SilentlyContinue
+                                $SharedHDDs=Get-VHD -Path "$LABfolder\VMs\SharedHDD-$VMSet-*.VHDS" -ErrorAction SilentlyContinue
                             }
                         #Build VM
                             BuildVM -VMConfig $VMConfig -LabConfig $labconfig -LabFolder $LABfolder
@@ -1178,7 +1202,7 @@ If (!( $isAdmin )) {
                                 WriteInfo "`t`t $filename size $($_.size /1GB)GB added to $VMname"
                             }
                     }
-                
+
                 #create VM with Simple configuration
                     if ($VMConfig.configuration -eq 'Simple'){
                         BuildVM -VMConfig $($VMConfig) -LabConfig $labconfig -LabFolder $LABfolder
@@ -1190,7 +1214,7 @@ If (!( $isAdmin )) {
                             BuildVM -VMConfig $VMConfig -LabConfig $labconfig -LabFolder $LABfolder
                         #compose VM name
                             $VMname=$Labconfig.Prefix+$VMConfig.VMName
-                        
+
                         #Add disks
                             #add "SSDs"
                                 If (($VMConfig.SSDNumber -ge 1) -and ($VMConfig.SSDNumber -ne $null)){         
@@ -1229,7 +1253,7 @@ If (!( $isAdmin )) {
                             }
                         #build VM
                             BuildVM -VMConfig $VMConfig -LabConfig $labconfig -LabFolder $LABfolder
-                        
+
                         #Add disks
                             $VMname=$Labconfig.Prefix+$VMConfig.VMName                
                             WriteInfoHighlighted "`t Attaching Shared Disks..."
@@ -1253,17 +1277,17 @@ If (!( $isAdmin )) {
 
 #region Finishing
     WriteInfoHighlighted "Finishing..." 
-    
+
     #a bit cleanup
         Remove-Item -Path "$PSScriptRoot\temp" -Force -Recurse
         if (Test-Path "$PSScriptRoot\unattend.xml") {
             remove-item "$PSScriptRoot\unattend.xml"
         }
-    
+
     #set MacSpoofing and AllowTeaming (for SET switch in VMs to work properly with vNICs)
         WriteInfo "`t Setting MacSpoofing On and AllowTeaming On"
         Set-VMNetworkAdapter -VMName "$($labconfig.Prefix)*" -MacAddressSpoofing On -AllowTeaming On
-    
+
     #list VMs 
         Get-VM | Where-Object name -like "$($labconfig.Prefix)*"  | ForEach-Object { WriteSuccess "Machine $($_.VMName) provisioned" }
 
