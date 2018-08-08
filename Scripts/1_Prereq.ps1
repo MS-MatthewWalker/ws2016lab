@@ -1,3 +1,5 @@
+<# Testing function file
+
 # Verify Running as Admin
 $isAdmin = ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")
 If (!( $isAdmin )) {
@@ -11,23 +13,23 @@ If (!( $isAdmin )) {
 
 #region Functions
 
-function WriteInfo($message){
+function Write-InfoMessage($message){
         Write-Host $message
     }
 
-function WriteInfoHighlighted($message){
+function Write-InfoHighlightedMessage($message){
     Write-Host $message -ForegroundColor Cyan
 }
 
-function WriteSuccess($message){
+function Write-SuccessMessage($message){
     Write-Host $message -ForegroundColor Green
 }
 
-function WriteError($message){
+function Write-ErrorMessage($message){
     Write-Host $message -ForegroundColor Red
 }
 
-function WriteErrorAndExit($message){
+function Write-ErrorMessageAndExit($message){
     Write-Host $message -ForegroundColor Red
     Write-Host "Press enter to continue ..."
     Stop-Transcript
@@ -41,16 +43,30 @@ function  Get-WindowsBuildNumber {
 } 
 
 #endregion
+#>
+
+Import-Module "$PSScriptRoot\Functions\WSLabFunctions.psd1" -Force
+
+$IsAdmin = Test-Administrator
+
+If (!($IsAdmin))
+{
+     Set-Administrator $PSCommandPath (Get-Location).Path
+     Exit
+}
+
 
 #region Initializtion
+Set-ScreenOffset
 
 # grab Time and start Transcript
     Start-Transcript -Path "$PSScriptRoot\Prereq.log"
     $StartDateTime = get-date
-    WriteInfo "Script started at $StartDateTime"
+    Write-InfoMessage "Script started at $StartDateTime"
 
 #Load LabConfig....
     . "$PSScriptRoot\LabConfig.ps1"
+
 
 #define some variables if it does not exist in labconfig
     If (!$LabConfig.DomainNetbiosName){
@@ -68,13 +84,13 @@ function  Get-WindowsBuildNumber {
 
 #region OS checks and folder build
 # Checking for Compatible OS
-    WriteInfoHighlighted "Checking if OS is Windows 10 1511 (10586)/Server 2016 or newer"
+    Write-InfoHighlightedMessage "Checking if OS is Windows 10 1511 (10586)/Server 2016 or newer"
 
     $BuildNumber=Get-WindowsBuildNumber
     if ($BuildNumber -ge 10586){
-        WriteSuccess "`t OS is Windows 10 1511 (10586)/Server 2016 or newer"
+        Write-SuccessMessage "`t OS is Windows 10 1511 (10586)/Server 2016 or newer"
     }else{
-        WriteErrorAndExit "`t Windows version  $BuildNumber detected. Version 10586 and newer is needed. Exiting"
+        Write-ErrorMessageAndExit "`t Windows version  $BuildNumber detected. Version 10586 and newer is needed. Exiting"
     }
 
 # Checking Folder Structure
@@ -126,7 +142,7 @@ do{
             $dotNET = Get-Item -Path $openfile.filename -ErrorAction SilentlyContinue
         }
         if (!$openFile.FileName){
-            Write-Host  "CAB was not selected... Exitting" -ForegroundColor Red
+            Write-Host  "CAB was not selected... Exiting" -ForegroundColor Red
             Write-Host "Press any key to continue ..."
             $host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown") | OUT-NULL
             $HOST.UI.RawUI.Flushinputbuffer()
@@ -156,7 +172,7 @@ If($openFile.ShowDialog() -eq "OK")
    Write-Host  "File $setupfile selected" -ForegroundColor Cyan
 }
 if (!$openFile.FileName){
-        Write-Host  "setup.exe was not selected... Exitting" -ForegroundColor Red
+        Write-Host  "setup.exe was not selected... Exiting" -ForegroundColor Red
         Write-Host "Press any key to continue ..."
         $host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown") | OUT-NULL
         $HOST.UI.RawUI.Flushinputbuffer()
@@ -383,7 +399,7 @@ Exit
             WriteInfo  "File $($openfile.FileName) selected"
         }
         if (!$openFile.FileName){
-            WriteErrorAndExit  "Iso was not selected... Exitting"
+            WriteErrorAndExit  "Iso was not selected... Exiting"
         }
         $ISO = Mount-DiskImage -ImagePath $openFile.FileName -PassThru
     
@@ -620,7 +636,7 @@ If (!( $isAdmin )) {
         }else{
             #detect RSAT
             if (!((Get-HotFix).hotfixid -contains "KB2693643") ){
-                Write-Host "Please install RSAT, Exitting in 5s"
+                Write-Host "Please install RSAT, Exiting in 5s"
                 Start-Sleep 5
                 Exit
             }
@@ -631,7 +647,7 @@ If (!( $isAdmin )) {
         $ClusterName=((Get-ADComputer -Filter 'serviceprincipalname -like "MSServercluster/*"').Name | ForEach-Object {get-cluster -Name $_ | Where-Object S2DEnabled -eq 1} | Out-GridView -OutputMode Single -Title "Please select your S2D Cluster(s)").Name
 
         if (-not $ClusterName){
-            Write-Output "No cluster was selected. Exitting"
+            Write-Output "No cluster was selected. Exiting"
             Start-Sleep 5
             Exit
         }
@@ -670,7 +686,7 @@ If (!( $isAdmin )) {
             WriteInfo  "File $($openfile.FileName) selected"
         } 
         if (!$openFile.FileName){
-                WriteErrorAndExit  "Iso was not selected... Exitting"
+                WriteErrorAndExit  "Iso was not selected... Exiting"
             }
         $ISOServer = Mount-DiskImage -ImagePath $openFile.FileName -PassThru
 
@@ -841,17 +857,17 @@ $exit=Read-Host
 
 #region some tools to download
 # Downloading diskspd if its not in tools folder
-    WriteInfoHighlighted "Testing diskspd presence"
+    Write-InfoHighlightedMessage "Testing diskspd presence"
     If ( Test-Path -Path "$PSScriptRoot\Tools\ToolsVHD\DiskSpd\diskspd.exe" ) {
-        WriteSuccess "`t Diskspd is present, skipping download"
+        Write-SuccessMessage "`t Diskspd is present, skipping download"
     }else{ 
-        WriteInfo "`t Diskspd not there - Downloading diskspd"
+        Write-InfoMessage "`t Diskspd not there - Downloading diskspd"
         try {
             $webcontent  = Invoke-WebRequest -Uri aka.ms/diskspd -UseBasicParsing
             $downloadurl = $webcontent.BaseResponse.ResponseUri.AbsoluteUri.Substring(0,$webcontent.BaseResponse.ResponseUri.AbsoluteUri.LastIndexOf('/'))+($webcontent.Links | where-object { $_.'data-url' -match '/Diskspd.*zip$' }|Select-Object -ExpandProperty "data-url")
             Invoke-WebRequest -Uri $downloadurl -OutFile "$PSScriptRoot\Tools\ToolsVHD\DiskSpd\diskspd.zip"
         }catch{
-            WriteError "`t Failed to download Diskspd!"
+            Write-ErrorMessage "`t Failed to download Diskspd!"
         }
         # Unnzipping and extracting just diskspd.exe x64
             Expand-Archive "$PSScriptRoot\Tools\ToolsVHD\DiskSpd\diskspd.zip" -DestinationPath "$PSScriptRoot\Tools\ToolsVHD\DiskSpd\Unzip"
@@ -861,16 +877,16 @@ $exit=Read-Host
     }
 
 #Download VMFleet
-    WriteInfoHighlighted "Testing VMFleet presence"
+    Write-InfoHighlightedMessage "Testing VMFleet presence"
     If ( Test-Path -Path "$PSScriptRoot\Tools\ToolsVHD\VMFleet\install-vmfleet.ps1" ) {
-        WriteSuccess "`t VMFleet is present, skipping download"
+        Write-SuccessMessage "`t VMFleet is present, skipping download"
     }else{ 
-        WriteInfo "`t VMFleet not there - Downloading VMFleet"
+        Write-InfoMessage "`t VMFleet not there - Downloading VMFleet"
         try {
             $downloadurl = "https://github.com/Microsoft/diskspd/archive/master.zip"
             Invoke-WebRequest -Uri $downloadurl -OutFile "$PSScriptRoot\Tools\ToolsVHD\VMFleet\VMFleet.zip"
         }catch{
-            WriteError "`t Failed to download VMFleet!"
+            Write-ErrorMessage "`t Failed to download VMFleet!"
         }
         # Unnzipping and extracting just VMFleet
             Expand-Archive "$PSScriptRoot\Tools\ToolsVHD\VMFleet\VMFleet.zip" -DestinationPath "$PSScriptRoot\Tools\ToolsVHD\VMFleet\Unzip"
@@ -880,22 +896,22 @@ $exit=Read-Host
     }
 
 # Download convert-windowsimage into ToolsRoot and ToolsVHD
-    WriteInfoHighlighted "Testing convert-windowsimage presence"
+    Write-InfoHighlightedMessage "Testing convert-windowsimage presence"
     If ( Test-Path -Path "$PSScriptRoot\Tools\convert-windowsimage.ps1" ) {
-        WriteSuccess "`t Convert-windowsimage.ps1 is present, skipping download"
+        Write-SuccessMessage "`t Convert-windowsimage.ps1 is present, skipping download"
     }else{ 
-        WriteInfo "`t Downloading Convert-WindowsImage"
+        Write-InfoMessage "`t Downloading Convert-WindowsImage"
         try{
             Invoke-WebRequest -UseBasicParsing -Uri https://raw.githubusercontent.com/MicrosoftDocs/Virtualization-Documentation/live/hyperv-tools/Convert-WindowsImage/Convert-WindowsImage.ps1 -OutFile "$PSScriptRoot\Tools\convert-windowsimage.ps1"
         }catch{
-            WriteError "`t Failed to download convert-windowsimage.ps1!"
+            Write-ErrorMessage "`t Failed to download convert-windowsimage.ps1!"
         }
     }
 
     If ( Test-Path -Path "$PSScriptRoot\Tools\ToolsVHD\convert-windowsimage.ps1" ) {
-        WriteSuccess "`t Convert-windowsimage.ps1 is in ToolsVHD, skipping copy"
+        Write-SuccessMessage "`t Convert-windowsimage.ps1 is in ToolsVHD, skipping copy"
     }else{
-        WriteInfo "`t Copying Convert-windowsimage.ps1 into ToolsVHD"
+        Write-InfoMessage "`t Copying Convert-windowsimage.ps1 into ToolsVHD"
         Copy-Item -Path "$PSScriptRoot\Tools\convert-windowsimage.ps1" -Destination "$PSScriptRoot\Tools\ToolsVHD\convert-windowsimage.ps1"
     }
 
@@ -906,43 +922,43 @@ $exit=Read-Host
 
     $modules=("xActiveDirectory","2.17.0.0"),("xDHCpServer","1.6.0.0"),<#("xDNSServer","1.8.0.0"),#>("xNetworking","5.5.0.0"),("xPSDesiredStateConfiguration","8.0.0.0")
     foreach ($module in $modules){
-        WriteInfoHighlighted "Testing if modules are present" 
+        Write-InfoHighlightedMessage "Testing if modules are present" 
         $modulename=$module[0]
         $moduleversion=$module[1]
         if (!(Test-Path "$PSScriptRoot\Tools\DSC\$modulename\$Moduleversion")){
-            WriteInfo "`t Module $module not found... Downloading"
+            Write-InfoMessage "`t Module $module not found... Downloading"
             #Install NuGET package provider   
             if ((Get-PackageProvider -Name NuGet) -eq $null){   
                 Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Confirm:$false -Force
             }
             Find-DscResource -moduleName $modulename -RequiredVersion $moduleversion | Save-Module -Path "$PSScriptRoot\Tools\DSC"
         }else{
-            WriteSuccess "`t Module $modulename version found... skipping download"
+            Write-SuccessMessage "`t Module $modulename version found... skipping download"
         }
     }
 
 # Installing DSC modules if needed
     foreach ($module in $modules) {
-        WriteInfoHighlighted "Testing DSC Module $module Presence"
+        Write-InfoHighlightedMessage "Testing DSC Module $module Presence"
         # Check if Module is installed
         if ((Get-DscResource -Module $Module[0] | where-object {$_.version -eq $module[1]}) -eq $Null) {
             # module is not installed - install it
-            WriteInfo "`t Module $module will be installed"
+            Write-InfoMessage "`t Module $module will be installed"
             $modulename=$module[0]
             $moduleversion=$module[1]
             Copy-item -Path "$PSScriptRoot\Tools\DSC\$modulename" -Destination "C:\Program Files\WindowsPowerShell\Modules" -Recurse -Force
-            WriteSuccess "`t Module was installed."
+            Write-SuccessMessage "`t Module was installed."
             Get-DscResource -Module $modulename
         } else {
             # module is already installed
-            WriteSuccess "`t Module $Module is already installed"
+            Write-SuccessMessage "`t Module $Module is already installed"
         }
     }
 
 #endregion
 
 # finishing 
-WriteInfo "Script finished at $(Get-date) and took $(((get-date) - $StartDateTime).TotalMinutes) Minutes"
+Write-InfoMessage "Script finished at $(Get-date) and took $(((get-date) - $StartDateTime).TotalMinutes) Minutes"
 Stop-Transcript
-WriteSuccess "Press enter to continue..."
+Write-SuccessMessage "Press enter to continue..."
 $exit=Read-Host
